@@ -1,0 +1,75 @@
+import { registerApplication } from 'single-spa';
+
+declare const System: {
+  import: (module: string) => Promise<any>;
+};
+
+export interface MicroFrontendApp {
+  name: string;
+  path: string;
+  appUrl: string;
+  displayName: string;
+  iconName?: string;
+}
+
+// Initial apps 
+const initialApps: MicroFrontendApp[] = [
+  {
+    name: '@spa/reactapp',
+    path: '/reactapp',
+    appUrl: 'http://localhost:4000/react-app.js',
+    displayName: 'React MFE App',
+    iconName: 'react'
+  }
+];
+
+// Store for registered apps
+let registeredApps = [...initialApps];
+
+// Register a single application with single-spa
+export const registerMicroFrontend = (app: MicroFrontendApp) => {
+  console.log(`Registering application: ${app.name} at path ${app.path}`);
+  registerApplication({
+    name: app.name,
+    app: () => System.import(app.name),
+    activeWhen: (location: Location) => {
+      // Check if the current path starts with the app's path
+      return location.pathname.startsWith(app.path);
+    },
+    customProps: {
+      domElementGetter: () => {
+        // Make sure the container element exists
+        const mainContent = document.querySelector('main');
+        let el = document.getElementById('single-spa-application');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'single-spa-application';
+          mainContent?.appendChild(el);
+        }
+        return el;
+      }
+    }
+  });
+  
+  // Add to registry if not already present
+  if (!registeredApps.some(registeredApp => registeredApp.name === app.name)) {
+    registeredApps = [...registeredApps, app];
+  }
+};
+
+// Register all applications from the registry
+export const registerAllApps = () => {
+  registeredApps.forEach(app => {
+    registerMicroFrontend(app);
+  });
+};
+
+// Add a new app to the registry
+export const addApp = (app: MicroFrontendApp) => {
+  registerMicroFrontend(app);
+};
+
+// Get all registered apps
+export const getRegisteredApps = (): MicroFrontendApp[] => {
+  return [...registeredApps];
+};
