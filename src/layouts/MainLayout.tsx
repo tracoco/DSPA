@@ -1,8 +1,7 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Outlet } from 'react-router-dom';
 import Header from '../components/Header';
 import Sidebar from '../components/layout/Sidebar';
-import HomePage from '../apps/HomePage';
 
 const MainLayout: React.FC = () => {
   const location = useLocation();
@@ -15,10 +14,10 @@ const MainLayout: React.FC = () => {
           <Sidebar />
         </div>
         <div className="content-area">
-          {location.pathname === '/' ? (
-            <HomePage />
-          ) : (
+          {!location.pathname.startsWith('/ws/') && location.pathname !== '/' ? (
             <div id="single-spa-application"></div>
+          ) : (
+            <Outlet />
           )}
         </div>
       </div>

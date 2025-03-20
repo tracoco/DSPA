@@ -67,7 +67,11 @@ const Sidebar = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    addCustomMenuItem(newMenuItem);
+    // Add workspace path prefix
+    addCustomMenuItem({
+      ...newMenuItem,
+      path: `/ws/${newMenuItem.path}`
+    });
     setNewMenuItem({ displayName: '', path: '' });
     setShowAddForm(false);
   };
