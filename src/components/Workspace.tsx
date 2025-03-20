@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppRegistry } from '../context/AppRegistryContext';
+import { useSidebar } from '../context/SidebarContext';
 import { registerApplication, unregisterApplication, start } from 'single-spa';
 import GridLayout from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -35,7 +36,30 @@ const Workspace: React.FC = () => {
   const [showAppSelector, setShowAppSelector] = useState(false);
   const [selectedApp, setSelectedApp] = useState('');
   const [ready, setReady] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [gridWidth, setGridWidth] = useState(0);
   const containerRefs = React.useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  // Handle container width changes
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth - 40; // 40px for padding
+        setGridWidth(containerWidth);
+      }
+    };
+
+    // Create ResizeObserver to watch container width changes
+    const resizeObserver = new ResizeObserver(updateWidth);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Initial width calculation
+    updateWidth();
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Initialize single-spa
   useEffect(() => {
@@ -139,17 +163,22 @@ const Workspace: React.FC = () => {
   };
 
   const handleDeleteCard = (cardId: string) => {
+    // Find the card first
     const card = workspace.cards.find(c => c.id === cardId);
-    if (!card) return;
+    if (!card) {
+      console.warn('Card not found:', cardId);
+      return;
+    }
 
-    // First update the state to remove the card immediately
-    setWorkspace(prev => ({
+    const appId = `${card.appName}-${card.id}`;
+
+    // Update the state immediately
+    setWorkspace((prev) => ({
       ...prev,
       cards: prev.cards.filter(c => c.id !== cardId)
     }));
 
-    // Then try to clean up the application
-    const appId = `${card.appName}-${card.id}`;
+    // Unregister the application
     try {
       unregisterApplication(appId);
     } catch (error) {
@@ -179,8 +208,8 @@ const Workspace: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div ref={containerRef} style={{ padding: '20px', width: '100%', height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
         <h2 style={{ margin: 0 }}>Workspace: {path}</h2>
         <button
           onClick={() => setShowAppSelector(true)}
@@ -255,7 +284,7 @@ const Workspace: React.FC = () => {
         }))}
         cols={12}
         rowHeight={100}
-        width={1200}
+        width={gridWidth}
         onLayoutChange={handleLayoutChange}
         draggableHandle=".card-header"
       >
@@ -273,13 +302,27 @@ const Workspace: React.FC = () => {
                 {apps.find(app => app.name === card.appName)?.displayName || card.appName}
               </h3>
               <button
-                onClick={() => handleDeleteCard(card.id)}
+                type="button"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  console.log('Delete button clicked for card:', card.id);
+                  handleDeleteCard(card.id);
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
                   color: '#e74c3c',
                   cursor: 'pointer',
-                  padding: '4px 8px'
+                  padding: '4px 8px',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  lineHeight: 1,
+                  zIndex: 1000
                 }}
               >
                 ×

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { navigateToUrl } from 'single-spa';
 import { useAppRegistry, type CustomMenuItem } from '../../context/AppRegistryContext';
+import { useSidebar } from '../../context/SidebarContext';
 
 const MenuLink = ({ path, iconName, displayName, onDelete }: {
   path: string;
@@ -60,8 +61,7 @@ const MenuLink = ({ path, iconName, displayName, onDelete }: {
 const Sidebar = () => {
   const context = useAppRegistry();
   const { apps, customMenuItems, addCustomMenuItem, removeCustomMenuItem } = context;
-  
-  console.log('AppRegistry Context:', context);
+  const { isCollapsed, sidebarWidth } = useSidebar();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMenuItem, setNewMenuItem] = useState({ displayName: '', path: '' });
 
@@ -77,7 +77,12 @@ const Sidebar = () => {
   };
 
   return (
-    <aside>
+    <aside className="sidebar" style={{
+      width: `${sidebarWidth}px`,
+      transition: 'width 0.3s ease',
+      padding: isCollapsed ? 0 : '20px',
+      overflow: 'hidden'
+    }}>
       <nav>
         <section style={{ marginBottom: '30px' }}>
           <h3 style={{ marginBottom: '15px', fontSize: '1.2em' }}>Applications</h3>
