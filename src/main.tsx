@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { start } from 'single-spa';
 import App from './App';
 import { registerAllApps } from './registry/appRegistry';
+import { AppRegistryProvider } from './context/AppRegistryContext';
 import './index.css';
 
 // Register all micro-frontend applications
@@ -14,8 +15,10 @@ start();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <AppRegistryProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AppRegistryProvider>
   </React.StrictMode>,
 );

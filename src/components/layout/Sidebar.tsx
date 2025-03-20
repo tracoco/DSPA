@@ -1,57 +1,166 @@
-import React from 'react';
+import { useState } from 'react';
 import { navigateToUrl } from 'single-spa';
-import { useAppRegistry } from '../../context/AppRegistryContext';
+import { useAppRegistry, type CustomMenuItem } from '../../context/AppRegistryContext';
 
-const Sidebar: React.FC = () => {
-  const { apps } = useAppRegistry();
+const MenuLink = ({ path, iconName, displayName, onDelete }: {
+  path: string;
+  iconName?: string;
+  displayName: string;
+  onDelete?: () => void;
+}) => (
+  <li style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
+    <a
+      href={path}
+      onClick={(e) => {
+        e.preventDefault();
+        navigateToUrl(path);
+      }}
+      style={{
+        color: 'white',
+        textDecoration: 'none',
+        padding: '10px',
+        display: 'block',
+        borderRadius: '4px',
+        transition: 'background-color 0.2s',
+        backgroundColor: 'transparent',
+        flex: 1
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.backgroundColor = '#2c3e50';
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent';
+      }}
+    >
+      {iconName && (
+        <span style={{ marginRight: '8px' }}>
+          <i className={`icon-${iconName}`}></i>
+        </span>
+      )}
+      {displayName}
+    </a>
+    {onDelete && (
+      <button
+        onClick={onDelete}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#e74c3c',
+          cursor: 'pointer',
+          padding: '5px',
+          marginLeft: '5px'
+        }}
+      >
+        ×
+      </button>
+    )}
+  </li>
+);
+
+const Sidebar = () => {
+  const context = useAppRegistry();
+  const { apps, customMenuItems, addCustomMenuItem, removeCustomMenuItem } = context;
+  
+  console.log('AppRegistry Context:', context);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newMenuItem, setNewMenuItem] = useState({ displayName: '', path: '' });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    addCustomMenuItem(newMenuItem);
+    setNewMenuItem({ displayName: '', path: '' });
+    setShowAddForm(false);
+  };
 
   return (
-    <aside style={{
-      width: '250px',
-      backgroundColor: '#34495e',
-      color: 'white',
-      position: 'fixed',
-      top: '60px',
-      left: 0,
-      bottom: 0,
-      padding: '20px'
-    }}>
+    <aside>
       <nav>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {apps.map((item) => (
-            <li key={item.path} style={{ marginBottom: '10px' }}>
-              <a
-                href={item.path}
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigateToUrl(item.path);
-                }}
+        <section style={{ marginBottom: '30px' }}>
+          <h3 style={{ marginBottom: '15px', fontSize: '1.2em' }}>Applications</h3>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {apps.map((item) => (
+              <MenuLink key={item.path} {...item} />
+            ))}
+          </ul>
+        </section>
+
+        <section style={{ marginBottom: '30px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2em' }}>Custom Menu</h3>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              style={{
+                background: 'none',
+                border: '1px solid white',
+                color: 'white',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                cursor: 'pointer'
+              }}
+            >
+              {showAddForm ? '−' : '+'}
+            </button>
+          </div>
+
+          {showAddForm && (
+            <form onSubmit={handleSubmit} style={{ marginBottom: '15px' }}>
+              <input
+                type="text"
+                placeholder="Display Name"
+                value={newMenuItem.displayName}
+                onChange={(e) => setNewMenuItem(prev => ({ ...prev, displayName: e.target.value }))}
                 style={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  padding: '10px',
-                  display: 'block',
+                  width: '100%',
+                  padding: '8px',
+                  marginBottom: '8px',
+                  backgroundColor: '#2c3e50',
+                  border: 'none',
                   borderRadius: '4px',
-                  transition: 'background-color 0.2s',
-                  backgroundColor: 'transparent'
+                  color: 'white'
                 }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#2c3e50';
+              />
+              <input
+                type="text"
+                placeholder="Path"
+                value={newMenuItem.path}
+                onChange={(e) => setNewMenuItem(prev => ({ ...prev, path: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  marginBottom: '8px',
+                  backgroundColor: '#2c3e50',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: 'white'
                 }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
+              />
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  backgroundColor: '#27ae60',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: 'white',
+                  cursor: 'pointer'
                 }}
               >
-                {item.iconName && (
-                  <span style={{ marginRight: '8px' }}>
-                    <i className={`icon-${item.iconName}`}></i>
-                  </span>
-                )}
-                {item.displayName}
-              </a>
-            </li>
-          ))}
-        </ul>
+                Add Menu Item
+              </button>
+            </form>
+          )}
+
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {customMenuItems.map((item) => (
+              <MenuLink
+                key={item.id}
+                {...item}
+                onDelete={() => removeCustomMenuItem(item.id)}
+              />
+            ))}
+          </ul>
+        </section>
       </nav>
     </aside>
   );
