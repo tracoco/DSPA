@@ -10,4 +10,9 @@ import { RouterOutlet } from '@angular/router';
 })
 export class AppComponent {
   title = 'angularapp';
+
+  sendMessage() {
+    const event = new CustomEvent('message', { detail: 'Hello from Angular!' });
+    window.dispatchEvent(event);
+  }
 }
