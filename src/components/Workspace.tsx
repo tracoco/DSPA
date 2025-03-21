@@ -26,6 +26,14 @@ interface WorkspaceState {
   cards: Card[];
 }
 
+interface ReactGridLayoutItem extends GridLayout.Layout {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 const Workspace: React.FC = () => {
   const { path } = useParams<{ path: string }>();
   const { apps } = useAppRegistry();
@@ -61,78 +69,155 @@ const Workspace: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Initialize single-spa
-  useEffect(() => {
-    start();
-  }, []);
-
-  // Handle application registration
+  // Track state
   const [isRegistering, setIsRegistering] = useState(false);
+  const mountedAppsRef = React.useRef<Set<string>>(new Set());
+  const isInitializedRef = React.useRef(false);
 
   useEffect(() => {
-    if (!path || !workspace || !apps || !ready || isRegistering) return;
+    if (!path || !workspace || !apps || isRegistering) return;
 
     const registerApplications = async () => {
+      // Skip if already initialized with the same configuration
+      const currentConfig = JSON.stringify(workspace.cards.map(c => ({ id: c.id, appName: c.appName })));
+      if (isInitializedRef.current && mountedAppsRef.current.size > 0) {
+        console.log('Applications already initialized, skipping registration');
+        return;
+      }
+      
       setIsRegistering(true);
+      console.log('Starting application registration process');
       try {
-        // Unregister previous applications
-        for (const card of workspace.cards) {
-          const appId = `${card.appName}-${card.id}`;
-          try {
-            await Promise.resolve(unregisterApplication(appId));
-          } catch (error) {
-            // Ignore unregister errors
-          }
-        }
+        const currentAppIds = new Set(workspace.cards.map(card => `${card.appName}-${card.id}`));
+        const previousAppIds = new Set(mountedAppsRef.current);
 
-        // Brief pause to ensure cleanup
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Register new applications
-        for (const card of workspace.cards) {
-          const appId = `${card.appName}-${card.id}`;
-          const app = apps.find(a => a.name === card.appName);
-          
-          if (app) {
+        // Only unregister applications that are no longer needed
+        for (const appId of previousAppIds) {
+          if (!currentAppIds.has(appId)) {
             try {
-              await Promise.resolve(registerApplication({
-                name: appId,
-                app: () => System.import(app.appUrl),
-                activeWhen: () => true,
-                customProps: {
-                  domElementGetter: () => document.getElementById(`spa-container-${card.id}`)
-                }
-              }));
+              console.log(`Unregistering removed application: ${appId}`);
+              await Promise.resolve(unregisterApplication(appId));
+              mountedAppsRef.current.delete(appId);
             } catch (error) {
-              console.error(`Failed to register application ${appId}: ${error}`);
+              console.warn(`Failed to unregister application ${appId}: ${error}`);
             }
           }
         }
 
-        start();
+        // Brief pause to ensure cleanup
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Register new applications sequentially
+        for (const card of workspace.cards) {
+          const appId = `${card.appName}-${card.id}`;
+          
+          // Skip if already mounted
+          if (mountedAppsRef.current.has(appId)) {
+            console.log(`Skipping already mounted application: ${appId}`);
+            continue;
+          }
+
+          const app = apps.find(a => a.name === card.appName);
+          if (app) {
+            // Longer delay between registrations
+            await new Promise(resolve => setTimeout(resolve, 300));
+            try {
+              console.log(`Registering application ${appId} with URL ${app.appUrl}`);
+              await Promise.resolve(registerApplication({
+                name: appId,
+                app: async () => {
+                  try {
+                    console.log(`Loading module for ${appId} from ${app.appUrl}`);
+                    const module = await System.import(app.appUrl);
+                    console.log(`Successfully loaded module for ${appId}`);
+                    return module;
+                  } catch (error) {
+                    console.error(`Failed to load module for ${appId}: ${error}`);
+                    throw error;
+                  }
+                },
+                activeWhen: () => true,
+                customProps: {
+                  domElementGetter: () => {
+                    const element = document.getElementById(`spa-container-${card.id}`);
+                    console.log(`DOM element for ${appId}:`, element);
+                    return element;
+                  }
+                }
+              }));
+              // Add to mounted apps set after successful registration
+              mountedAppsRef.current.add(appId);
+              console.log(`Successfully registered application ${appId}`);
+            } catch (error) {
+              console.error(`Failed to register application ${appId}:`, error);
+            }
+          }
+        }
+
+        // Wait longer to ensure all apps are properly loaded
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Start single-spa and wait for it to complete
+        await start();
+        console.log('Single-spa started, verifying mounts...');
+
+        // Verify all registered applications
+        const registeredAppIds = Array.from(mountedAppsRef.current);
+        for (const appId of registeredAppIds) {
+          const card = workspace.cards.find(c => `${c.appName}-${c.id}` === appId);
+          if (card) {
+            const container = document.getElementById(`spa-container-${card.id}`);
+            const isMounted = Boolean(container && container.children && container.children.length > 0);
+            console.log(`Mount verification for ${appId}:`, isMounted ? 'Success' : 'Not mounted');
+            
+            if (!isMounted) {
+              console.warn(`Application ${appId} failed to mount properly, removing from tracked mounts`);
+              mountedAppsRef.current.delete(appId);
+            }
+          }
+        }
+
+        // Mark as initialized after successful registration
+        isInitializedRef.current = true;
+        console.log('All applications initialized successfully');
       } finally {
         setIsRegistering(false);
+        console.log('Registration process completed');
       }
     };
 
+    // Save workspace state and start registration
     localStorage.setItem(`workspace-${path}`, JSON.stringify(workspace));
-    registerApplications();
+    registerApplications().catch(error => {
+      console.error('Failed to register applications:', error);
+      setIsRegistering(false);
+    });
 
     // Cleanup on unmount
     return () => {
       const cleanup = async () => {
-        for (const card of workspace.cards) {
-          const appId = `${card.appName}-${card.id}`;
+        // Get all currently mounted apps
+        const mountedApps = Array.from(mountedAppsRef.current);
+        console.log('Cleaning up mounted applications:', mountedApps);
+
+        // Clean up each mounted app
+        for (const appId of mountedApps) {
           try {
+            console.log(`Unregistering application during cleanup: ${appId}`);
             await Promise.resolve(unregisterApplication(appId));
+            mountedAppsRef.current.delete(appId);
           } catch (error) {
-            // Ignore cleanup errors
+            console.warn(`Failed to cleanup application ${appId}: ${error}`);
           }
         }
       };
-      cleanup();
+
+      // Run cleanup and handle any errors
+      cleanup().catch(error => {
+        console.error('Error during cleanup:', error);
+      });
     };
-  }, [workspace, apps, path, ready]);
+  }, [workspace, path, apps, ready, isRegistering]);
 
   // Set ready after initial render
   useEffect(() => {
@@ -148,13 +233,13 @@ const Workspace: React.FC = () => {
       appName: selectedApp,
       layout: {
         x: 0,
-        y: workspace.cards.reduce((maxY, card) => Math.max(maxY, card.layout.y), 0), // Place at the bottom
+        y: workspace.cards.reduce((maxY: number, card: Card) => Math.max(maxY, card.layout.y), 0),
         w: 6,
         h: 4
       }
     };
 
-    setWorkspace(prev => ({
+    setWorkspace((prev: WorkspaceState) => ({
       ...prev,
       cards: [...prev.cards, newCard]
     }));
@@ -162,34 +247,42 @@ const Workspace: React.FC = () => {
     setSelectedApp('');
   };
 
-  const handleDeleteCard = (cardId: string) => {
-    // Find the card first
-    const card = workspace.cards.find(c => c.id === cardId);
+  const handleDeleteCard = async (cardId: string) => {
+    const card = workspace.cards.find((c: Card) => c.id === cardId);
     if (!card) {
       console.warn('Card not found:', cardId);
       return;
     }
 
     const appId = `${card.appName}-${card.id}`;
+    console.log(`Deleting card ${cardId} with app ${appId}`);
 
-    // Update the state immediately
-    setWorkspace((prev) => ({
-      ...prev,
-      cards: prev.cards.filter(c => c.id !== cardId)
-    }));
-
-    // Unregister the application
-    try {
-      unregisterApplication(appId);
-    } catch (error) {
-      console.warn(`Failed to unregister application: ${error}`);
+    // First unregister the application
+    if (mountedAppsRef.current.has(appId)) {
+      try {
+        console.log(`Unregistering application for deletion: ${appId}`);
+        await Promise.resolve(unregisterApplication(appId));
+        mountedAppsRef.current.delete(appId);
+        console.log(`Successfully unregistered application: ${appId}`);
+      } catch (error) {
+        console.warn(`Failed to unregister application: ${error}`);
+      }
     }
+
+    // Then update the workspace state
+    setWorkspace((prev: WorkspaceState) => {
+      console.log(`Updating workspace state to remove card: ${cardId}`);
+      return {
+        ...prev,
+        cards: prev.cards.filter((c: Card) => c.id !== cardId)
+      };
+    });
   };
 
-  const handleLayoutChange = (layout: GridLayout.Layout[]) => {
-    setWorkspace(prev => ({
+  const handleLayoutChange = (layout: ReactGridLayoutItem[]) => {
+    setWorkspace((prev: WorkspaceState) => ({
       ...prev,
-      cards: prev.cards.map(card => {
+      cards: prev.cards.map((card: Card) => {
         const updatedLayout = layout.find(l => l.i === card.id);
         if (updatedLayout) {
           return {

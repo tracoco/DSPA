@@ -2,6 +2,8 @@ import { registerApplication } from 'single-spa';
 
 declare const System: {
   import: (module: string) => Promise<any>;
+  set: (name: string, exports: any) => void;
+  resolve: (name: string) => string;
 };
 
 export interface MicroFrontendApp {
@@ -20,6 +22,20 @@ const initialApps: MicroFrontendApp[] = [
     appUrl: 'http://localhost:4000/react-app.js',
     displayName: 'React MFE App',
     iconName: 'react'
+  },
+  {
+    name: '@spa/reactapp1',
+    path: '/reactapp1',
+    appUrl: 'http://localhost:4001/react-app.js',
+    displayName: 'React MFE App1',
+    iconName: 'react'
+  },
+  {
+    name: '@spa/angularapp',
+    path: '/angularapp',
+    appUrl: 'http://localhost:4002/angularapp.js',
+    displayName: 'Angular MFE App',
+    iconName: 'angular'
   }
 ];
 
@@ -29,11 +45,12 @@ let registeredApps = [...initialApps];
 // Register a single application with single-spa
 export const registerMicroFrontend = (app: MicroFrontendApp) => {
   console.log(`Registering application: ${app.name} at path ${app.path}`);
+
+  // Register application with single-spa
   registerApplication({
     name: app.name,
-    app: () => System.import(app.name),
+    app: () => System.import(app.appUrl),
     activeWhen: (location: Location) => {
-      // Check if the current path starts with the app's path
       return location.pathname.startsWith(app.path);
     },
     customProps: {
